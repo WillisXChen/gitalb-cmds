@@ -67,11 +67,31 @@ login_glab() {
     read -rp "是否要重新登入？(y/N): " confirm
     [[ "$(echo "$confirm" | tr '[:upper:]' '[:lower:]')" != "y" ]] && echo "取消。" && return 0
   fi
-  echo -e "${CYAN}⏳ 開啟瀏覽器進行 GitLab 登入驗證...${RESET}"
-  glab auth login --web --git-protocol https
+  
+  echo -e "${CYAN}📌 因為終端機環境或 glab 版本限制，不支援瀏覽器驗證。${RESET}"
+  echo -e "請前往 GitLab 產生 Personal Access Token (PAT):"
+  echo -e "網址: ${BOLD}https://gitlab.com/-/profile/personal_access_tokens${RESET}"
+  echo -e "（建立時請勾選 ${YELLOW}api, read_repository, write_repository${RESET} 權限）"
   echo ""
-  echo -e "${GREEN}✓ 登入完成：${RESET}"
-  glab auth status || true
+  
+  read -s -rp "👉 請貼上你的 GitLab Token: " token
+  echo ""
+  
+  if [ -z "$token" ]; then
+    echo -e "${RED}✗ Token 不能為空。${RESET}"
+    return 1
+  fi
+
+  echo -e "${CYAN}⏳ 正在驗證 Token...${RESET}"
+  echo "$token" | glab auth login --stdin --hostname gitlab.com --git-protocol https
+  
+  echo ""
+  if glab auth status --hostname gitlab.com &>/dev/null; then
+    echo -e "${GREEN}✓ 登入完成：${RESET}"
+    glab auth status || true
+  else
+    echo -e "${RED}✗ 登入失敗，請檢查 Token 是否正確。${RESET}"
+  fi
 }
 
 logout_glab() {
