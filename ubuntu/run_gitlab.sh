@@ -40,22 +40,24 @@ install_glab() {
   echo -e "${BOLD}▶ 安裝 GitLab CLI (glab)${RESET}"
   if command -v glab &>/dev/null; then
     echo -e "${GREEN}✓ glab 已安裝，版本：$(glab --version | head -n1)${RESET}"
-  else
-    echo -e "${YELLOW}⏳ 正在嘗試透過 apt 安裝 glab...${RESET}"
-    sudo apt update
-    # 嘗試用 apt 安裝 (Ubuntu 較新版本有內建)
-    if sudo apt install -y glab; then
-      echo -e "${GREEN}✓ 安裝完成：$(glab --version | head -n1)${RESET}"
-    else
-      echo -e "${RED}✗ apt 安裝失敗，嘗試透過 snap 安裝...${RESET}"
-      sudo snap install glab
-      echo -e "${GREEN}✓ 安裝完成：$(glab --version | head -n1)${RESET}"
-    fi
+    echo -e "${YELLOW}🔄 確保版本是最新的，以支援 device 驗證模式...${RESET}"
   fi
+  
+  # 使用 GitLab 官方源確保能安裝到最新版 (支援 --device)
+  echo -e "${CYAN}⏳ 加入 GitLab 官方套件庫並安裝 glab...${RESET}"
+  if command -v curl &>/dev/null; then
+    curl -sL https://packages.gitlab.com/install/repositories/gitlab/gitlab-cli/script.deb.sh | sudo bash
+    sudo apt update
+    sudo apt install -y glab
+  else
+    echo -e "${RED}✗ 找不到 curl，請先安裝 curl。${RESET}"
+    return 1
+  fi
+  echo -e "${GREEN}✓ 安裝/更新完成：$(glab --version | head -n1)${RESET}"
 }
 
 login_glab() {
-  echo -e "${BOLD}▶ 登入 GitLab 帳號${RESET}"
+  echo -e "${BOLD}▶ 登入 GitLab 帳號 (Device Token Flow)${RESET}"
   if ! command -v glab &>/dev/null; then
     echo -e "${RED}✗ glab 尚未安裝，請先執行 [1] 安裝${RESET}"
     return 1
@@ -68,29 +70,18 @@ login_glab() {
     [[ "$(echo "$confirm" | tr '[:upper:]' '[:lower:]')" != "y" ]] && echo "取消。" && return 0
   fi
   
-  echo -e "${CYAN}📌 因為終端機環境或 glab 版本限制，不支援瀏覽器驗證。${RESET}"
-  echo -e "請前往 GitLab 產生 Personal Access Token (PAT):"
-  echo -e "網址: ${BOLD}https://gitlab.com/-/profile/personal_access_tokens${RESET}"
-  echo -e "（建立時請勾選 ${YELLOW}api, read_repository, write_repository${RESET} 權限）"
+  echo -e "${CYAN}📌 使用 Device Token 驗證模式 (適合在終端機操作)。${RESET}"
+  echo -e "稍後畫面會顯示一串代碼 (Code) 以及驗證網址，請在任何有瀏覽器的裝置上開啟網址並輸入代碼驗證。"
   echo ""
   
-  read -s -rp "👉 請貼上你的 GitLab Token: " token
-  echo ""
-  
-  if [ -z "$token" ]; then
-    echo -e "${RED}✗ Token 不能為空。${RESET}"
-    return 1
-  fi
-
-  echo -e "${CYAN}⏳ 正在驗證 Token...${RESET}"
-  echo "$token" | glab auth login --stdin --hostname gitlab.com --git-protocol https
+  glab auth login --hostname gitlab.com --device --git-protocol https
   
   echo ""
   if glab auth status --hostname gitlab.com &>/dev/null; then
     echo -e "${GREEN}✓ 登入完成：${RESET}"
     glab auth status || true
   else
-    echo -e "${RED}✗ 登入失敗，請檢查 Token 是否正確。${RESET}"
+    echo -e "${RED}✗ 登入失敗或已取消。${RESET}"
   fi
 }
 
