@@ -57,7 +57,7 @@ install_glab() {
 }
 
 login_glab() {
-  echo -e "${BOLD}▶ 登入 GitLab 帳號 (Device Token Flow)${RESET}"
+  echo -e "${BOLD}▶ 登入 GitLab 帳號 (--web 驗證)${RESET}"
   if ! command -v glab &>/dev/null; then
     echo -e "${RED}✗ glab 尚未安裝，請先執行 [1] 安裝${RESET}"
     return 1
@@ -70,11 +70,11 @@ login_glab() {
     [[ "$(echo "$confirm" | tr '[:upper:]' '[:lower:]')" != "y" ]] && echo "取消。" && return 0
   fi
   
-  echo -e "${CYAN}📌 使用 Device Token 驗證模式 (適合在終端機操作)。${RESET}"
-  echo -e "稍後畫面會顯示一串代碼 (Code) 以及驗證網址，請在任何有瀏覽器的裝置上開啟網址並輸入代碼驗證。"
+  echo -e "${CYAN}⏳ 開啟瀏覽器進行 GitLab 登入驗證...${RESET}"
   echo ""
   
-  glab auth login --hostname gitlab.com --device --git-protocol https
+  # 使用 --web 開啟瀏覽器驗證
+  glab auth login --hostname gitlab.com --web --git-protocol https
   
   echo ""
   if glab auth status --hostname gitlab.com &>/dev/null; then
