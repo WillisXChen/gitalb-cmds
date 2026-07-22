@@ -40,7 +40,7 @@ install_glab() {
   echo -e "${BOLD}▶ 安裝 GitLab CLI (glab)${RESET}"
   if command -v glab &>/dev/null; then
     echo -e "${GREEN}✓ glab 已安裝，版本：$(glab --version | head -n1)${RESET}"
-    echo -e "${YELLOW}🔄 確保版本是最新的，以支援 --device 瀏覽器驗證...${RESET}"
+    echo -e "${YELLOW}🔄 確保版本是最新的，避免遇到功能不相容的問題...${RESET}"
   fi
 
   if ! command -v curl &>/dev/null; then
@@ -49,8 +49,8 @@ install_glab() {
   fi
 
   # packages.gitlab.com 的 apt 官方源在部分 arm 裝置 (如樹莓派) 上常抓不到
-  # 真正的最新版，導致裝到的 glab 太舊而不支援 --device。改為直接抓官方
-  # Release 頁面對應架構的 .deb 安裝，確保版本與 --device 支援一致。
+  # 真正的最新版，導致裝到的 glab 太舊而缺少新功能。改為直接抓官方
+  # Release 頁面對應架構的 .deb 安裝，確保裝到的是最新版本。
   local deb_arch
   case "$(uname -m)" in
     x86_64) deb_arch="amd64" ;;
@@ -86,7 +86,7 @@ install_glab() {
 }
 
 login_glab() {
-  echo -e "${BOLD}▶ 登入 GitLab 帳號 (--device 驗證)${RESET}"
+  echo -e "${BOLD}▶ 登入 GitLab 帳號${RESET}"
   if ! command -v glab &>/dev/null; then
     echo -e "${RED}✗ glab 尚未安裝，請先執行 [1] 安裝${RESET}"
     return 1
@@ -99,17 +99,13 @@ login_glab() {
     [[ "$(echo "$confirm" | tr '[:upper:]' '[:lower:]')" != "y" ]] && echo "取消。" && return 0
   fi
   
-  echo -e "${CYAN}⏳ 開啟瀏覽器進行 GitLab 登入驗證 (Device Token 模式)...${RESET}"
+  echo -e "${CYAN}⏳ 開啟互動式登入流程，請依畫面指示完成驗證...${RESET}"
   echo ""
 
-  if glab auth login --help 2>&1 | grep -qw -- '--device'; then
-    # 使用 --device 開啟 Device Token 驗證 (會顯示超連結與 Code)
-    glab auth login --hostname gitlab.com --device --git-protocol https
-  else
-    echo -e "${YELLOW}⚠ 目前 glab 版本過舊，不支援 --device 瀏覽器驗證，請先執行 [1] 安裝以更新版本。${RESET}"
-    echo -e "${YELLOW}   暫時改用互動式登入（需手動貼上 Personal Access Token）：${RESET}"
-    glab auth login --hostname gitlab.com --git-protocol https
-  fi
+  # --api-host/--api-protocol/--git-protocol 等旗標在部分舊版 glab 上
+  # 只能搭配 --token/--stdin 的非互動模式使用，帶入會直接報錯。
+  # 因此僅指定 --hostname 略過主機選擇，其餘交給互動精靈處理。
+  glab auth login --hostname gitlab.com
 
   echo ""
   if glab auth status --hostname gitlab.com &>/dev/null; then
@@ -174,7 +170,7 @@ main_menu() {
 
   local descriptions=(
     "透過 apt/snap 安裝或確認 glab 版本"
-    "使用瀏覽器 Device Token 驗證登入 GitLab"
+    "使用互動式流程登入 GitLab"
     "登出目前已登入的 GitLab 帳號"
     "顯示 glab 安裝版本與登入帳號資訊"
     "結束程式"
@@ -202,7 +198,7 @@ main_menu() {
       --preview='
         case "{}" in
           *安裝*) echo "📦 透過 apt 安裝 glab，已安裝則顯示版本" ;;
-          *登入*) echo "🔑 使用瀏覽器 Device Token 驗證登入 GitLab 帳號" ;;
+          *登入*) echo "🔑 使用互動式流程登入 GitLab 帳號" ;;
           *登出*) echo "🚪 登出目前已登入的 GitLab 帳號" ;;
           *查看*) echo "📋 顯示 glab 安裝版本與登入帳號資訊" ;;
           *離開*) echo "👋 結束程式" ;;
