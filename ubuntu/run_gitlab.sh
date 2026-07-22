@@ -40,24 +40,53 @@ install_glab() {
   echo -e "${BOLD}▶ 安裝 GitLab CLI (glab)${RESET}"
   if command -v glab &>/dev/null; then
     echo -e "${GREEN}✓ glab 已安裝，版本：$(glab --version | head -n1)${RESET}"
-    echo -e "${YELLOW}🔄 確保版本是最新的，以支援 device 驗證模式...${RESET}"
+    echo -e "${YELLOW}🔄 確保版本是最新的，以支援 --device 瀏覽器驗證...${RESET}"
   fi
-  
-  # 使用 GitLab 官方源確保能安裝到最新版 (支援 --device)
-  echo -e "${CYAN}⏳ 加入 GitLab 官方套件庫並安裝 glab...${RESET}"
-  if command -v curl &>/dev/null; then
-    curl -sL https://packages.gitlab.com/install/repositories/gitlab/gitlab-cli/script.deb.sh | sudo bash
-    sudo apt update
-    sudo apt install -y glab
-  else
+
+  if ! command -v curl &>/dev/null; then
     echo -e "${RED}✗ 找不到 curl，請先安裝 curl。${RESET}"
     return 1
   fi
+
+  # packages.gitlab.com 的 apt 官方源在部分 arm 裝置 (如樹莓派) 上常抓不到
+  # 真正的最新版，導致裝到的 glab 太舊而不支援 --device。改為直接抓官方
+  # Release 頁面對應架構的 .deb 安裝，確保版本與 --device 支援一致。
+  local deb_arch
+  case "$(uname -m)" in
+    x86_64) deb_arch="amd64" ;;
+    aarch64|arm64) deb_arch="arm64" ;;
+    armv6l|armv7l) deb_arch="armv6" ;;
+    i386|i686) deb_arch="386" ;;
+    *) echo -e "${RED}✗ 不支援的架構：$(uname -m)${RESET}"; return 1 ;;
+  esac
+
+  echo -e "${CYAN}⏳ 查詢 glab 最新版本...${RESET}"
+  local latest_tag latest_version deb_url tmp_deb
+  latest_tag=$(curl -sL https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/releases/permalink/latest \
+    | grep -o '"tag_name":"[^"]*' | head -n1 | cut -d'"' -f4)
+  latest_version="${latest_tag#v}"
+
+  if [[ -z "$latest_version" ]]; then
+    echo -e "${RED}✗ 無法取得最新版本號，請確認網路連線後再試一次。${RESET}"
+    return 1
+  fi
+
+  deb_url="https://gitlab.com/gitlab-org/cli/-/releases/${latest_tag}/downloads/glab_${latest_version}_linux_${deb_arch}.deb"
+  tmp_deb="$(mktemp --suffix=.deb)"
+  echo -e "${CYAN}⏳ 下載 glab ${latest_tag} (${deb_arch})...${RESET}"
+  if ! curl -sL --fail "$deb_url" -o "$tmp_deb"; then
+    echo -e "${RED}✗ 下載失敗：${deb_url}${RESET}"
+    rm -f "$tmp_deb"
+    return 1
+  fi
+  sudo dpkg -i "$tmp_deb"
+  rm -f "$tmp_deb"
+
   echo -e "${GREEN}✓ 安裝/更新完成：$(glab --version | head -n1)${RESET}"
 }
 
 login_glab() {
-  echo -e "${BOLD}▶ 登入 GitLab 帳號 (--web 驗證)${RESET}"
+  echo -e "${BOLD}▶ 登入 GitLab 帳號 (--device 驗證)${RESET}"
   if ! command -v glab &>/dev/null; then
     echo -e "${RED}✗ glab 尚未安裝，請先執行 [1] 安裝${RESET}"
     return 1
@@ -70,12 +99,18 @@ login_glab() {
     [[ "$(echo "$confirm" | tr '[:upper:]' '[:lower:]')" != "y" ]] && echo "取消。" && return 0
   fi
   
-  echo -e "${CYAN}⏳ 開啟瀏覽器進行 GitLab 登入驗證...${RESET}"
+  echo -e "${CYAN}⏳ 開啟瀏覽器進行 GitLab 登入驗證 (Device Token 模式)...${RESET}"
   echo ""
-  
-  # 使用 --web 開啟瀏覽器驗證
-  glab auth login --hostname gitlab.com --web --git-protocol https
-  
+
+  if glab auth login --help 2>&1 | grep -qw -- '--device'; then
+    # 使用 --device 開啟 Device Token 驗證 (會顯示超連結與 Code)
+    glab auth login --hostname gitlab.com --device --git-protocol https
+  else
+    echo -e "${YELLOW}⚠ 目前 glab 版本過舊，不支援 --device 瀏覽器驗證，請先執行 [1] 安裝以更新版本。${RESET}"
+    echo -e "${YELLOW}   暫時改用互動式登入（需手動貼上 Personal Access Token）：${RESET}"
+    glab auth login --hostname gitlab.com --git-protocol https
+  fi
+
   echo ""
   if glab auth status --hostname gitlab.com &>/dev/null; then
     echo -e "${GREEN}✓ 登入完成：${RESET}"
@@ -139,7 +174,7 @@ main_menu() {
 
   local descriptions=(
     "透過 apt/snap 安裝或確認 glab 版本"
-    "使用瀏覽器 Web 驗證登入 GitLab"
+    "使用瀏覽器 Device Token 驗證登入 GitLab"
     "登出目前已登入的 GitLab 帳號"
     "顯示 glab 安裝版本與登入帳號資訊"
     "結束程式"
@@ -167,7 +202,7 @@ main_menu() {
       --preview='
         case "{}" in
           *安裝*) echo "📦 透過 apt 安裝 glab，已安裝則顯示版本" ;;
-          *登入*) echo "🔑 使用瀏覽器 Web 驗證登入 GitLab 帳號" ;;
+          *登入*) echo "🔑 使用瀏覽器 Device Token 驗證登入 GitLab 帳號" ;;
           *登出*) echo "🚪 登出目前已登入的 GitLab 帳號" ;;
           *查看*) echo "📋 顯示 glab 安裝版本與登入帳號資訊" ;;
           *離開*) echo "👋 結束程式" ;;
