@@ -60,7 +60,7 @@ login_glab() {
     [[ "$(echo "$confirm" | tr '[:upper:]' '[:lower:]')" != "y" ]] && echo "取消。" && return 0
   fi
   echo -e "${CYAN}⏳ 開啟瀏覽器進行 GitLab 登入驗證...${RESET}"
-  glab auth login --web --git-protocol https
+  glab auth login --hostname gitlab.com --web --git-protocol https
   echo ""
   echo -e "${GREEN}✓ 登入完成：${RESET}"
   glab auth status || true
